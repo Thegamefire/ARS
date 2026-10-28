@@ -302,19 +302,23 @@ impl ConnectionManager {
                     let mut items: HashMap<SlotId, Vec<NetworkItem>> = HashMap::new();
                     let current_slot_locations = self.seed.locations.get(&info.slot).expect("Connected Slot not in Seed Locations");
 
-                    for location in l_packet.locations {
+                    for location in &l_packet.locations {
                         let Some((item_id, slot_id, flags)) = current_slot_locations.get(&location) else {
                             return Err(InvalidArguments { text: String::from("Invalid location"), command : String::from("LocationChecks")});
                         };
                         let network_item =
-                            NetworkItem::new(*item_id, location, info.slot, *flags);
+                            NetworkItem::new(*item_id, *location, info.slot, *flags);
                         match items.get_mut(slot_id) {
                             Some(v) => v.push(network_item),
                             None => { items.insert(*slot_id, vec![network_item]); }
                         }
                     }
+
+                    let mut owned_state = self.multiworld_state.lock().await;
+                    owned_state.check_locations(&info.slot, l_packet.locations);
                     items
                 };
+
 
                 for (slot, items) in items.into_iter() {
                     send_items_to_slot(items, slot).await;

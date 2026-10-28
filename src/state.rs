@@ -51,4 +51,11 @@ impl MultiworldState {
         }
         result
     }
+
+    pub fn check_locations(&mut self, slot: &SlotId, locations: Vec<LocationId>) {
+        let location_set = self.collected_locations.get_mut(slot).expect("Adding locations not in seed");
+        for loc in locations {
+            location_set.insert(loc);
+        }
+    }
 }
