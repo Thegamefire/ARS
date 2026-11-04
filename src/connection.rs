@@ -295,7 +295,7 @@ impl ConnectionManager {
                     let connection = connections.get(&self.uuid).unwrap();
                     let Some(info) = &connection.connection_info else {
                         return Err(NotConnected {
-                            command: "ConnectUpdate".into(),
+                            command: "LocationChecks".into(),
                         });
                     };
 
