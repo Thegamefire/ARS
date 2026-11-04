@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 pub mod client;
 pub mod server;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct NetworkVersion {
     class: String,
     major: u16,
@@ -22,7 +22,7 @@ impl NetworkVersion {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct NetworkPlayer {
     class: String,
     pub team: TeamId,
@@ -63,7 +63,7 @@ impl NetworkItem {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 enum Permission {
     Disabled,
     Enabled,

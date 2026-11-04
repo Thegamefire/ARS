@@ -2,7 +2,7 @@ use crate::connection::ClientError::{InvalidArguments, NotConnected};
 use crate::connection::ConnectionRefusedReason::{InvalidGame, InvalidItemsHandling, InvalidSlot};
 use crate::messages::client::ClientPacket;
 use crate::messages::server::ServerPacket;
-use crate::messages::server::ServerPacket::{ConnectionRefused};
+use crate::messages::server::ServerPacket::{ConnectionRefused, LocationInfo};
 use crate::messages::server::connected::ConnectedPacket;
 use crate::messages::server::connection_refused::{
     ConnectionRefusedPacket, ConnectionRefusedReason,
@@ -14,8 +14,8 @@ use crate::messages::server::received_items::ReceivedItemsPacket;
 use crate::messages::server::roominfo::RoomInfoPacket;
 use crate::seed::Seed;
 use crate::state::MultiworldState;
-use crate::structs::{GameName, SlotId};
-use crate::{send_items_to_slot, send_packet, send_packets};
+use crate::structs::{GameName, LocationId, SlotId};
+use crate::{send_items_to_slot, send_packet, send_packets, send_to_everyone};
 use ServerPacket::InvalidPacket;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
@@ -27,7 +27,9 @@ use tokio::sync::{Mutex, RwLock};
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
+use crate::messages::client::location_scouts::CreateAsHint;
 use crate::messages::NetworkItem;
+use crate::messages::server::location_info::LocationInfoPacket;
 
 pub static CONNECTIONS: LazyLock<RwLock<HashMap<Uuid, Connection>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
@@ -323,6 +325,56 @@ impl ConnectionManager {
                 for (slot, items) in items.into_iter() {
                     send_items_to_slot(items, slot).await;
                 }
+            },
+            ClientPacket::LocationScouts(l_packet) => {
+
+                let connections = CONNECTIONS.read().await;
+                let connection = connections.get(&self.uuid).unwrap();
+                let Some(info) = &connection.connection_info else {
+                    return Err(NotConnected {
+                        command: "LocationScouts".into(),
+                    });
+                };
+
+                let slot_locations = self.seed.locations.get(&info.slot).expect("Connected Slot not in Seed Locations");
+
+                for loc in &l_packet.locations {
+                    if !slot_locations.contains_key(&loc) {
+                        return Err(InvalidArguments {command: "LocationScouts".into(), text: format!("{} is not a valid location id of this slot", loc)})
+                    }
+                }
+
+
+                let mut locked_state = self.multiworld_state.lock().await;
+
+                let mut new_locations: Vec<LocationId> = vec![];
+
+                let previously_hinted_locations = locked_state.hinted_locations(&info.slot);
+
+                for loc in &l_packet.locations {
+                    if !previously_hinted_locations.contains(loc) {
+                        new_locations.push(*loc);
+                    }
+                }
+
+                locked_state.add_hints(&l_packet.locations, &info.slot);
+
+                let locations_to_hint = match l_packet.create_as_hint {
+                    CreateAsHint::Hidden => vec![],
+                    CreateAsHint::BroadcastNew => new_locations,
+                    CreateAsHint::BroadcastAll => l_packet.locations,
+                };
+
+                let items: Vec<NetworkItem> = locations_to_hint.iter().map(|loc| {
+                        let item = slot_locations.get(loc).unwrap();
+                        NetworkItem::new(item.0, *loc, item.1, item.2)
+                    }
+                ).collect();
+
+                let packet = LocationInfo(LocationInfoPacket {
+                    locations: items
+                });
+                send_to_everyone(vec![packet]).await;
             }
         };
         Ok(())

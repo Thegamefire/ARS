@@ -58,4 +58,28 @@ impl MultiworldState {
             location_set.insert(loc);
         }
     }
+
+    pub fn hinted_locations(&self, slot: &SlotId) -> Vec<LocationId> {
+        match self.hinted_locations.get(slot) {
+            None => vec![],
+            Some(set) => set.iter().map(|l| *l).collect()
+        }
+    }
+
+    pub fn add_hints(&mut self, locations: &Vec<LocationId>, slot: &SlotId) {
+        match self.hinted_locations.get_mut(slot) {
+            None => {
+                let mut set = HashSet::new();
+                for l in locations {
+                    set.insert(*l);
+                }
+                self.hinted_locations.insert(*slot, set);
+            }
+            Some(set) => {
+                for l in locations {
+                    set.insert(*l);
+                }
+            }
+        }
+    }
 }

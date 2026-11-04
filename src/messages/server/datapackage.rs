@@ -4,12 +4,12 @@ use crate::structs::GameName;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct DataPackagePacket {
     data: DatapackageObject,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct DatapackageObject {
     games: HashMap<GameName, GameDatapackagePart>,
 }

@@ -5,7 +5,7 @@ use crate::structs::GameName;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct RoomInfoPacket {
     version: NetworkVersion,
     generator_version: NetworkVersion,

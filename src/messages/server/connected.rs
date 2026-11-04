@@ -3,7 +3,7 @@ use crate::structs::{GameName, LocationId, SlotId, SlotName, SlotType, TeamId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ConnectedPacket {
     pub team: TeamId,
     pub slot: SlotId,

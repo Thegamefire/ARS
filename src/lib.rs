@@ -5,7 +5,6 @@ use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 use crate::messages::NetworkItem;
 use crate::messages::server::received_items::ReceivedItemsPacket;
-use crate::messages::server::ServerPacket::ReceivedItems;
 use crate::structs::SlotId;
 
 pub mod connection;
@@ -81,5 +80,13 @@ pub async fn send_items_to_slot(items: Vec<NetworkItem>, slot: SlotId) {
 
     for (c_id, packet) in packets {
         send_packet(c_id, packet).await;
+    }
+}
+
+pub async fn send_to_everyone(packets: Vec<ServerPacket>) {
+    let connections = CONNECTIONS.read().await;
+
+    for id in connections.keys() {
+        send_packets(*id, packets.clone()).await;
     }
 }
