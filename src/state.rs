@@ -3,6 +3,7 @@ use crate::messages::client::create_hints::HintStatus;
 use crate::seed::Seed;
 use crate::structs::{LocationId, SlotAlias, SlotId, TeamId};
 use std::collections::{HashMap, HashSet};
+use crate::messages::client::create_hints::HintStatus::Found;
 
 pub struct MultiworldState {
     collected_locations: HashMap<SlotId, HashSet<LocationId>>,
@@ -58,8 +59,13 @@ impl MultiworldState {
             .collected_locations
             .get_mut(slot)
             .expect("Adding locations not in seed");
+        let mut empty = HashMap::new();
+        let location_hints = self.hinted_locations.get_mut(slot).unwrap_or(&mut empty);
         for loc in locations {
             location_set.insert(loc);
+            if location_hints.contains_key(&loc) {
+                location_hints.insert(loc, Found);
+            }
         }
     }
 
