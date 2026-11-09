@@ -89,4 +89,17 @@ impl MultiworldState {
             }
         }
     }
+
+    pub fn update_hint_status(
+        &mut self,
+        location_owner: SlotId,
+        location: LocationId,
+        status: HintStatus,
+    ) {
+        let Some(slot_hints) = self.hinted_locations.get_mut(&location_owner) else {
+            return;
+        };
+
+        slot_hints.insert(location, status);
+    }
 }

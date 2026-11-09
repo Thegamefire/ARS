@@ -456,6 +456,49 @@ impl ConnectionManager {
                 let packet = LocationInfo(LocationInfoPacket { locations: items });
                 send_to_everyone(vec![packet]).await;
             }
+            ClientPacket::UpdateHint(h_packet) => {
+                let connections = CONNECTIONS.read().await;
+                let connection = connections.get(&self.uuid).unwrap();
+                let Some(info) = &connection.connection_info else {
+                    return Err(NotConnected {
+                        command: "UpdateHint".into(),
+                    });
+                };
+
+                if h_packet.status == HintStatus::Found {
+                    return Err(InvalidArguments {
+                        command: "UpdateHint".into(),
+                        text: "Can't manually set hint to found".into(),
+                    });
+                }
+
+                let Some(slot_locations) = self.seed.locations.get(&h_packet.player) else {
+                    return Err(InvalidArguments {
+                        command: "UpdateHint".into(),
+                        text: "Invalid Player".into(),
+                    });
+                };
+                let Some(item) = slot_locations.get(&h_packet.location) else {
+                    return Err(InvalidArguments {
+                        command: "UpdateHint".into(),
+                        text: "Invalid Location".into(),
+                    });
+                };
+
+                if item.1 != info.slot {
+                    return Err(InvalidArguments {
+                        command: "UpdateHint".into(),
+                        text: "Can't Change Status of Hints of other players".into(),
+                    });
+                }
+
+                let mut locked_state = self.multiworld_state.lock().await;
+                locked_state.update_hint_status(
+                    h_packet.player,
+                    h_packet.location,
+                    h_packet.status,
+                );
+            }
         };
         Ok(())
     }

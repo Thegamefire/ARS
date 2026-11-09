@@ -8,7 +8,7 @@ pub struct CreateHintsPacket {
     pub status: HintStatus,
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, Default)]
+#[derive(Copy, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub enum HintStatus {
     #[default]
     #[serde(rename = "HINT_UNSPECIFIED")]
