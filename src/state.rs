@@ -1,8 +1,8 @@
 use crate::messages::NetworkItem;
+use crate::messages::client::create_hints::HintStatus;
 use crate::seed::Seed;
 use crate::structs::{LocationId, SlotAlias, SlotId, TeamId};
 use std::collections::{HashMap, HashSet};
-use crate::messages::client::create_hints::HintStatus;
 
 pub struct MultiworldState {
     collected_locations: HashMap<SlotId, HashSet<LocationId>>,
@@ -54,7 +54,10 @@ impl MultiworldState {
     }
 
     pub fn check_locations(&mut self, slot: &SlotId, locations: Vec<LocationId>) {
-        let location_set = self.collected_locations.get_mut(slot).expect("Adding locations not in seed");
+        let location_set = self
+            .collected_locations
+            .get_mut(slot)
+            .expect("Adding locations not in seed");
         for loc in locations {
             location_set.insert(loc);
         }
@@ -63,7 +66,7 @@ impl MultiworldState {
     pub fn hinted_locations(&self, slot: &SlotId) -> Vec<LocationId> {
         match self.hinted_locations.get(slot) {
             None => vec![],
-            Some(set) => set.iter().map(|l| *l.0).collect()
+            Some(set) => set.iter().map(|l| *l.0).collect(),
         }
     }
 
@@ -78,7 +81,8 @@ impl MultiworldState {
             }
             Some(map) => {
                 for (l, s) in locations {
-                    if !map.contains_key(l) { // Dont Update Status for existing hints (that should be done with another method)
+                    if !map.contains_key(l) {
+                        // Dont Update Status for existing hints (that should be done with another method)
                         map.insert(*l, *s);
                     }
                 }

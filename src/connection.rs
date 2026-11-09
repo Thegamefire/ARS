@@ -1,6 +1,9 @@
 use crate::connection::ClientError::{InvalidArguments, NotConnected};
 use crate::connection::ConnectionRefusedReason::{InvalidGame, InvalidItemsHandling, InvalidSlot};
+use crate::messages::NetworkItem;
 use crate::messages::client::ClientPacket;
+use crate::messages::client::create_hints::HintStatus;
+use crate::messages::client::location_scouts::CreateAsHint;
 use crate::messages::server::ServerPacket;
 use crate::messages::server::ServerPacket::{ConnectionRefused, LocationInfo};
 use crate::messages::server::connected::ConnectedPacket;
@@ -10,6 +13,7 @@ use crate::messages::server::connection_refused::{
 use crate::messages::server::datapackage::DataPackagePacket;
 use crate::messages::server::invalid::PacketProblemType::Arguments;
 use crate::messages::server::invalid::{InvalidPacketPacket, PacketProblemType};
+use crate::messages::server::location_info::LocationInfoPacket;
 use crate::messages::server::received_items::ReceivedItemsPacket;
 use crate::messages::server::roominfo::RoomInfoPacket;
 use crate::seed::Seed;
@@ -27,10 +31,6 @@ use tokio::sync::{Mutex, RwLock};
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
-use crate::messages::client::create_hints::HintStatus;
-use crate::messages::client::location_scouts::CreateAsHint;
-use crate::messages::NetworkItem;
-use crate::messages::server::location_info::LocationInfoPacket;
 
 pub static CONNECTIONS: LazyLock<RwLock<HashMap<Uuid, Connection>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
@@ -40,7 +40,7 @@ pub struct ConnectionInfo {
     pub game: GameName,
     pub tags: Vec<String>,
     pub items_handling: u8,
-    pub next_ri_index: u64
+    pub next_ri_index: u64,
 }
 
 pub struct Connection {
@@ -291,7 +291,7 @@ impl ConnectionManager {
                 drop(locked_state);
                 drop(connections);
                 send_packet(self.uuid, received_items_packet).await;
-            },
+            }
             ClientPacket::LocationChecks(l_packet) => {
                 let items = {
                     let connections = CONNECTIONS.read().await;
@@ -303,17 +303,26 @@ impl ConnectionManager {
                     };
 
                     let mut items: HashMap<SlotId, Vec<NetworkItem>> = HashMap::new();
-                    let current_slot_locations = self.seed.locations.get(&info.slot).expect("Connected Slot not in Seed Locations");
+                    let current_slot_locations = self
+                        .seed
+                        .locations
+                        .get(&info.slot)
+                        .expect("Connected Slot not in Seed Locations");
 
                     for location in &l_packet.locations {
-                        let Some((item_id, slot_id, flags)) = current_slot_locations.get(&location) else {
-                            return Err(InvalidArguments { text: String::from("Invalid location"), command : String::from("LocationChecks")});
+                        let Some((item_id, slot_id, flags)) = current_slot_locations.get(location)
+                        else {
+                            return Err(InvalidArguments {
+                                text: String::from("Invalid location"),
+                                command: String::from("LocationChecks"),
+                            });
                         };
-                        let network_item =
-                            NetworkItem::new(*item_id, *location, info.slot, *flags);
+                        let network_item = NetworkItem::new(*item_id, *location, info.slot, *flags);
                         match items.get_mut(slot_id) {
                             Some(v) => v.push(network_item),
-                            None => { items.insert(*slot_id, vec![network_item]); }
+                            None => {
+                                items.insert(*slot_id, vec![network_item]);
+                            }
                         }
                     }
 
@@ -322,13 +331,11 @@ impl ConnectionManager {
                     items
                 };
 
-
                 for (slot, items) in items.into_iter() {
                     send_items_to_slot(items, slot).await;
                 }
-            },
+            }
             ClientPacket::LocationScouts(l_packet) => {
-
                 let connections = CONNECTIONS.read().await;
                 let connection = connections.get(&self.uuid).unwrap();
                 let Some(info) = &connection.connection_info else {
@@ -337,14 +344,20 @@ impl ConnectionManager {
                     });
                 };
 
-                let slot_locations = self.seed.locations.get(&info.slot).expect("Connected Slot not in Seed Locations");
+                let slot_locations = self
+                    .seed
+                    .locations
+                    .get(&info.slot)
+                    .expect("Connected Slot not in Seed Locations");
 
                 for loc in &l_packet.locations {
-                    if !slot_locations.contains_key(&loc) {
-                        return Err(InvalidArguments {command: "LocationScouts".into(), text: format!("{} is not a valid location id of this slot", loc)})
+                    if !slot_locations.contains_key(loc) {
+                        return Err(InvalidArguments {
+                            command: "LocationScouts".into(),
+                            text: format!("{} is not a valid location id of this slot", loc),
+                        });
                     }
                 }
-
 
                 let mut locked_state = self.multiworld_state.lock().await;
 
@@ -358,8 +371,12 @@ impl ConnectionManager {
                     }
                 }
 
-                let hints_with_status = &l_packet.locations.iter().map(|l| (*l, HintStatus::Unspecified)).collect();
-                locked_state.add_hints(&hints_with_status, &info.slot);
+                let hints_with_status = &l_packet
+                    .locations
+                    .iter()
+                    .map(|l| (*l, HintStatus::Unspecified))
+                    .collect();
+                locked_state.add_hints(hints_with_status, &info.slot);
 
                 let locations_to_hint = match l_packet.create_as_hint {
                     CreateAsHint::Hidden => vec![],
@@ -367,17 +384,17 @@ impl ConnectionManager {
                     CreateAsHint::BroadcastAll => l_packet.locations,
                 };
 
-                let items: Vec<NetworkItem> = locations_to_hint.iter().map(|loc| {
+                let items: Vec<NetworkItem> = locations_to_hint
+                    .iter()
+                    .map(|loc| {
                         let item = slot_locations.get(loc).unwrap();
                         NetworkItem::new(item.0, *loc, item.1, item.2)
-                    }
-                ).collect();
+                    })
+                    .collect();
 
-                let packet = LocationInfo(LocationInfoPacket {
-                    locations: items
-                });
+                let packet = LocationInfo(LocationInfoPacket { locations: items });
                 send_to_everyone(vec![packet]).await;
-            },
+            }
             ClientPacket::CreateHints(h_packet) => {
                 let connections = CONNECTIONS.read().await;
                 let connection = connections.get(&self.uuid).unwrap();
@@ -392,17 +409,23 @@ impl ConnectionManager {
                 let Some(slot_locations) = self.seed.locations.get(&location_slot) else {
                     return Err(InvalidArguments {
                         command: "CreateHints".into(),
-                        text: "Specified Slot not in Seed".into()
-                    })
+                        text: "Specified Slot not in Seed".into(),
+                    });
                 };
 
                 for loc in &h_packet.locations {
-                    match slot_locations.get(&loc) {
-                        Some(item) if item.1 != info.slot => Err(InvalidArguments {command: "CreateHints".into(), text: "Not all locations contain items of the connected slot".into()}),
-                        None => Err(InvalidArguments {command: "CreateHints".into(), text: format!("{} is not a valid location id of this slot", loc)}),
-                        _ => Ok(())
+                    match slot_locations.get(loc) {
+                        Some(item) if item.1 != info.slot => Err(InvalidArguments {
+                            command: "CreateHints".into(),
+                            text: "Not all locations contain items of the connected slot".into(),
+                        }),
+                        None => Err(InvalidArguments {
+                            command: "CreateHints".into(),
+                            text: format!("{} is not a valid location id of this slot", loc),
+                        }),
+                        _ => Ok(()),
                     }?
-                };
+                }
 
                 let mut locked_state = self.multiworld_state.lock().await;
 
@@ -415,19 +438,22 @@ impl ConnectionManager {
                     }
                 }
 
-                let hints_with_status = &h_packet.locations.iter().map(|l| (*l, h_packet.status)).collect();
-                locked_state.add_hints(&hints_with_status, &info.slot);
+                let hints_with_status = &h_packet
+                    .locations
+                    .iter()
+                    .map(|l| (*l, h_packet.status))
+                    .collect();
+                locked_state.add_hints(hints_with_status, &info.slot);
 
+                let items: Vec<NetworkItem> = new_locations
+                    .iter()
+                    .map(|loc| {
+                        let item = slot_locations.get(loc).unwrap();
+                        NetworkItem::new(item.0, *loc, item.1, item.2)
+                    })
+                    .collect();
 
-                let items: Vec<NetworkItem> = new_locations.iter().map(|loc| {
-                    let item = slot_locations.get(loc).unwrap();
-                    NetworkItem::new(item.0, *loc, item.1, item.2)
-                }
-                ).collect();
-
-                let packet = LocationInfo(LocationInfoPacket {
-                    locations: items
-                });
+                let packet = LocationInfo(LocationInfoPacket { locations: items });
                 send_to_everyone(vec![packet]).await;
             }
         };

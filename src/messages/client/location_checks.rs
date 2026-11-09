@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
 use crate::structs::LocationId;
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]
 pub struct LocationChecksPacket {
-    pub locations: Vec<LocationId>
+    pub locations: Vec<LocationId>,
 }

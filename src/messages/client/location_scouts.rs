@@ -1,11 +1,10 @@
-use serde::{Deserialize, Serialize, Serializer};
 use crate::structs::LocationId;
-
+use serde::{Deserialize, Serialize, Serializer};
 
 #[derive(Serialize, Deserialize)]
 pub struct LocationScoutsPacket {
     pub locations: Vec<LocationId>,
-    pub create_as_hint: CreateAsHint
+    pub create_as_hint: CreateAsHint,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -16,15 +15,13 @@ pub enum CreateAsHint {
     BroadcastAll,
 }
 
-impl TryFrom<i32> for CreateAsHint {
-    type Error = std::convert::Infallible;
-
-    fn try_from(value: i32) -> Result<Self, Self::Error> {
-        Ok(match value {
+impl From<i32> for CreateAsHint {
+    fn from(value: i32) -> Self {
+        match value {
             0 => Self::Hidden,
             2 => Self::BroadcastNew,
             _ => Self::BroadcastAll,
-        })
+        }
     }
 }
 
