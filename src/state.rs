@@ -2,10 +2,11 @@ use crate::messages::NetworkItem;
 use crate::seed::Seed;
 use crate::structs::{LocationId, SlotAlias, SlotId, TeamId};
 use std::collections::{HashMap, HashSet};
+use crate::messages::client::create_hints::HintStatus;
 
 pub struct MultiworldState {
     collected_locations: HashMap<SlotId, HashSet<LocationId>>,
-    hinted_locations: HashMap<SlotId, HashSet<LocationId>>,
+    hinted_locations: HashMap<SlotId, HashMap<LocationId, HintStatus>>,
     slot_aliases: HashMap<(TeamId, SlotId), SlotAlias>,
 }
 impl MultiworldState {
@@ -17,7 +18,7 @@ impl MultiworldState {
         };
         for slot in seed.slot_ids() {
             s.collected_locations.insert(slot, HashSet::new());
-            s.hinted_locations.insert(slot, HashSet::new());
+            s.hinted_locations.insert(slot, HashMap::new());
         }
         s
     }
@@ -62,22 +63,24 @@ impl MultiworldState {
     pub fn hinted_locations(&self, slot: &SlotId) -> Vec<LocationId> {
         match self.hinted_locations.get(slot) {
             None => vec![],
-            Some(set) => set.iter().map(|l| *l).collect()
+            Some(set) => set.iter().map(|l| *l.0).collect()
         }
     }
 
-    pub fn add_hints(&mut self, locations: &Vec<LocationId>, slot: &SlotId) {
+    pub fn add_hints(&mut self, locations: &Vec<(LocationId, HintStatus)>, slot: &SlotId) {
         match self.hinted_locations.get_mut(slot) {
             None => {
-                let mut set = HashSet::new();
-                for l in locations {
-                    set.insert(*l);
+                let mut map = HashMap::new();
+                for (l, s) in locations {
+                    map.insert(*l, *s);
                 }
-                self.hinted_locations.insert(*slot, set);
+                self.hinted_locations.insert(*slot, map);
             }
-            Some(set) => {
-                for l in locations {
-                    set.insert(*l);
+            Some(map) => {
+                for (l, s) in locations {
+                    if !map.contains_key(l) { // Dont Update Status for existing hints (that should be done with another method)
+                        map.insert(*l, *s);
+                    }
                 }
             }
         }

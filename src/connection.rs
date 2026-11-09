@@ -27,6 +27,7 @@ use tokio::sync::{Mutex, RwLock};
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
+use crate::messages::client::create_hints::HintStatus;
 use crate::messages::client::location_scouts::CreateAsHint;
 use crate::messages::NetworkItem;
 use crate::messages::server::location_info::LocationInfoPacket;
@@ -357,7 +358,8 @@ impl ConnectionManager {
                     }
                 }
 
-                locked_state.add_hints(&l_packet.locations, &info.slot);
+                let hints_with_status = &l_packet.locations.iter().map(|l| (*l, HintStatus::Unspecified)).collect();
+                locked_state.add_hints(&hints_with_status, &info.slot);
 
                 let locations_to_hint = match l_packet.create_as_hint {
                     CreateAsHint::Hidden => vec![],
@@ -369,6 +371,58 @@ impl ConnectionManager {
                         let item = slot_locations.get(loc).unwrap();
                         NetworkItem::new(item.0, *loc, item.1, item.2)
                     }
+                ).collect();
+
+                let packet = LocationInfo(LocationInfoPacket {
+                    locations: items
+                });
+                send_to_everyone(vec![packet]).await;
+            },
+            ClientPacket::CreateHints(h_packet) => {
+                let connections = CONNECTIONS.read().await;
+                let connection = connections.get(&self.uuid).unwrap();
+                let Some(info) = &connection.connection_info else {
+                    return Err(NotConnected {
+                        command: "CreateHints".into(),
+                    });
+                };
+
+                let location_slot = h_packet.player.unwrap_or(info.slot);
+
+                let Some(slot_locations) = self.seed.locations.get(&location_slot) else {
+                    return Err(InvalidArguments {
+                        command: "CreateHints".into(),
+                        text: "Specified Slot not in Seed".into()
+                    })
+                };
+
+                for loc in &h_packet.locations {
+                    match slot_locations.get(&loc) {
+                        Some(item) if item.1 != info.slot => Err(InvalidArguments {command: "CreateHints".into(), text: "Not all locations contain items of the connected slot".into()}),
+                        None => Err(InvalidArguments {command: "CreateHints".into(), text: format!("{} is not a valid location id of this slot", loc)}),
+                        _ => Ok(())
+                    }?
+                };
+
+                let mut locked_state = self.multiworld_state.lock().await;
+
+                let mut new_locations = vec![];
+                let previously_hinted_locations = locked_state.hinted_locations(&info.slot);
+
+                for loc in &h_packet.locations {
+                    if !previously_hinted_locations.contains(loc) {
+                        new_locations.push(*loc);
+                    }
+                }
+
+                let hints_with_status = &h_packet.locations.iter().map(|l| (*l, h_packet.status)).collect();
+                locked_state.add_hints(&hints_with_status, &info.slot);
+
+
+                let items: Vec<NetworkItem> = new_locations.iter().map(|loc| {
+                    let item = slot_locations.get(loc).unwrap();
+                    NetworkItem::new(item.0, *loc, item.1, item.2)
+                }
                 ).collect();
 
                 let packet = LocationInfo(LocationInfoPacket {
